@@ -181,13 +181,18 @@ async function getAMDGpuStats(isWindows: boolean) {
     return [];
   }
 
-  var gpus = sdata["gpu_data"].map(d => {
+  // Filter out iGPU and any device without real usage data (usage is "N/A" string)
+  var gpus = sdata["gpu_data"].filter(d => {
+    const i = amdParseInt(d["gpu"]);
+    const gpu_data = mdata["gpu_data"][i];
+    return gpu_data && typeof gpu_data["usage"] === 'object' && gpu_data["usage"] !== null;
+  }).map(d => {
     const i = amdParseInt(d["gpu"]);
     const gpu_data = mdata["gpu_data"][i];
     const mem_total = amdParseFloat(gpu_data["mem_usage"]["total_vram"]["value"]);
     const mem_used =  amdParseFloat(gpu_data["mem_usage"]["used_vram"]["value"]);
     const mem_free =  amdParseFloat(gpu_data["mem_usage"]["free_visible_vram"]["value"]);
-    const mem_utilization = ((1.0 - (mem_total - mem_free)) / mem_total) * 100;
+    const mem_utilization = mem_total > 0 ? (mem_used / mem_total) * 100 : 0;
 
     return {
       index: i,
@@ -205,7 +210,7 @@ async function getAMDGpuStats(isWindows: boolean) {
       },
       power: {
         draw: amdParseFloat(gpu_data["power"]["socket_power"]["value"]),
-        limit: amdParseFloat(() => {
+        limit: amdParseFloat((() => {
 	  try {
 	    if (d["limit"]["max_power"]) {
 	      return d["limit"]["max_power"]["value"];
@@ -215,7 +220,7 @@ async function getAMDGpuStats(isWindows: boolean) {
 	  } catch (error) {
 	    return 0.0;
 	  }
-	})
+	})())
       },
       clocks: {
         graphics: amdParseInt(gpu_data["clock"]["gfx_0"]["clk"]["value"]),
